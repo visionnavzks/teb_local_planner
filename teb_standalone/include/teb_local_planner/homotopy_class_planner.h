@@ -143,7 +143,7 @@ public:
    *		      otherwise the final velocity will be zero (default: false)
    * @return \c true if planning was successful, \c false otherwise
    */
-  virtual bool plan(const PoseSE2& start, const PoseSE2& goal, const Eigen::Vector3d* start_vel = NULL, bool free_goal_vel=false);
+  virtual bool plan(const PoseSE2& start, const PoseSE2& goal, const Twist* start_vel = NULL, bool free_goal_vel=false);
 
   /**
    * @brief Get the velocity command from a previously optimized plan to control the robot at the current sampling interval.
@@ -213,7 +213,7 @@ public:
    * @param start_velocity start velocity (optional)
    * @param free_goal_vel if \c true, a nonzero final velocity at the goal pose is allowed, otherwise the final velocity will be zero (default: false)
    */
-  void exploreEquivalenceClassesAndInitTebs(const PoseSE2& start, const PoseSE2& goal, double dist_to_obst, const Eigen::Vector3d* start_vel, bool free_goal_vel = false);
+  void exploreEquivalenceClassesAndInitTebs(const PoseSE2& start, const PoseSE2& goal, double dist_to_obst, const Twist* start_vel, bool free_goal_vel = false);
 
   /**
    * @brief Add a new Teb to the internal trajectory container, if this teb constitutes a new equivalence class. Initialize it using a generic 2D reference path
@@ -231,7 +231,7 @@ public:
    * @return Shared pointer to the newly created teb optimal planner
    */
   template<typename BidirIter, typename Fun>
-  TebOptimalPlannerPtr addAndInitNewTeb(BidirIter path_start, BidirIter path_end, Fun fun_position, double start_orientation, double goal_orientation, const Eigen::Vector3d* start_velocity, bool free_goal_vel = false);
+  TebOptimalPlannerPtr addAndInitNewTeb(BidirIter path_start, BidirIter path_end, Fun fun_position, double start_orientation, double goal_orientation, const Twist* start_velocity, bool free_goal_vel = false);
 
   /**
    * @brief Add a new Teb to the internal trajectory container, if this teb constitutes a new equivalence class. Initialize it with a simple straight line between a given start and goal
@@ -241,7 +241,7 @@ public:
    * @param free_goal_vel if \c true, a nonzero final velocity at the goal pose is allowed, otherwise the final velocity will be zero (default: false)
    * @return Shared pointer to the newly created teb optimal planner
    */
-  TebOptimalPlannerPtr addAndInitNewTeb(const PoseSE2& start, const PoseSE2& goal, const Eigen::Vector3d* start_velocity, bool free_goal_vel = false);
+  TebOptimalPlannerPtr addAndInitNewTeb(const PoseSE2& start, const PoseSE2& goal, const Twist* start_velocity, bool free_goal_vel = false);
 
   /**
    * @brief Update TEBs with new pose, goal and current velocity.
@@ -249,7 +249,7 @@ public:
    * @param goal New goal pose (optional)
    * @param start_velocity start velocity (optional)
    */
-  void updateAllTEBs(const PoseSE2* start, const PoseSE2* goal, const Eigen::Vector3d* start_velocity);
+  void updateAllTEBs(const PoseSE2* start, const PoseSE2* goal, const Twist* start_velocity);
 
 
   /**

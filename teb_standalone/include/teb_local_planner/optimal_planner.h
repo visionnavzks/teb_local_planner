@@ -139,7 +139,7 @@ public:
    *		      otherwise the final velocity will be zero (default: false)
    * @return \c true if planning was successful, \c false otherwise
    */
-  virtual bool plan(const PoseSE2& start, const PoseSE2& goal, const Eigen::Vector3d* start_vel = NULL, bool free_goal_vel=false);
+  virtual bool plan(const PoseSE2& start, const PoseSE2& goal, const Twist* start_vel = NULL, bool free_goal_vel=false);
   
   
   /**
@@ -195,14 +195,14 @@ public:
    * @remarks Calling this function is not neccessary if the initial velocity is passed via the plan() method
    * @param vel_start Eigen::Vector3d containing the start velocity (vx, vy, omega)
    */
-  void setVelocityStart(const Eigen::Vector3d& vel_start);
+  void setVelocityStart(const Twist& vel_start);
   
   /**
    * @brief Set the desired final velocity at the trajectory's goal pose.
    * @remarks Call this function only if a non-zero velocity is desired and if \c free_goal_vel is set to \c false in plan()
    * @param vel_goal Eigen::Vector3d containing the translational and angular final velocity (vx, vy, omega)
    */
-  void setVelocityGoal(const Eigen::Vector3d& vel_goal);
+  void setVelocityGoal(const Twist& vel_goal);
   
   /**
    * @brief Set the desired final velocity at the trajectory's goal pose to be the maximum velocity limit

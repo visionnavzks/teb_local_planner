@@ -38,6 +38,7 @@
 
 #include <teb_local_planner/graph_search.h>
 #include <teb_local_planner/homotopy_class_planner.h>
+#include <boost/bind/bind.hpp>
 
 namespace teb_local_planner
 {

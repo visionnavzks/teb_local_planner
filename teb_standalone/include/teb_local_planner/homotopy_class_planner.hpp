@@ -63,7 +63,7 @@ EquivalenceClassPtr HomotopyClassPlanner::calculateEquivalenceClass(BidirIter pa
 
 
 template<typename BidirIter, typename Fun>
-TebOptimalPlannerPtr HomotopyClassPlanner::addAndInitNewTeb(BidirIter path_start, BidirIter path_end, Fun fun_position, double start_orientation, double goal_orientation, const Eigen::Vector3d* start_velocity, bool free_goal_vel)
+TebOptimalPlannerPtr HomotopyClassPlanner::addAndInitNewTeb(BidirIter path_start, BidirIter path_end, Fun fun_position, double start_orientation, double goal_orientation, const Twist* start_velocity, bool free_goal_vel)
 {
   TebOptimalPlannerPtr candidate = TebOptimalPlannerPtr( new TebOptimalPlanner(*cfg_, obstacles_));
 

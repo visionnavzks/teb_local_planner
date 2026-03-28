@@ -61,6 +61,7 @@
 #include <iostream>
 
 #include <teb_local_planner/equivalence_relations.h>
+#include <teb_local_planner/teb_types.h>
 #include <teb_local_planner/pose_se2.h>
 #include <teb_local_planner/teb_config.h>
 
