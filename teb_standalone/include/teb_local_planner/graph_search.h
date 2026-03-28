@@ -102,7 +102,7 @@ inline const Eigen::Vector2d& getVector2dFromHcGraph(HcGraphVertexType vert_desc
   return graph[vert_descriptor].pos;
 }
 
-//! Simple struct replacing geometry_msgs::Twist for standalone usage
+//! Simple struct replacing Twist for standalone usage
 struct Twist
 {
   double vx = 0;     //!< Linear velocity in x
