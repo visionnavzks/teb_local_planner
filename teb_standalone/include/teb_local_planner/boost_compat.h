@@ -18,4 +18,11 @@
 // boost::optional / boost::none  (used in timed_elastic_band.h/hpp, homotopy_class_planner.h/hpp, h_signature.h)
 #include <boost/optional.hpp>
 
+// boost::shared_ptr / boost::make_shared  (used in obstacles.h, robot_footprint_model.h, etc.)
+#include <boost/shared_ptr.hpp>
+#include <boost/make_shared.hpp>
+
+// boost::mutex / boost::thread  (used in teb_config.h, homotopy_class_planner.cpp)
+#include <boost/thread/mutex.hpp>
+
 #endif // TEB_BOOST_COMPAT_H_

@@ -102,13 +102,7 @@ inline const Eigen::Vector2d& getVector2dFromHcGraph(HcGraphVertexType vert_desc
   return graph[vert_descriptor].pos;
 }
 
-//! Simple struct replacing Twist for standalone usage
-struct Twist
-{
-  double vx = 0;     //!< Linear velocity in x
-  double vy = 0;     //!< Linear velocity in y
-  double omega = 0;  //!< Angular velocity around z
-};
+#include <teb_local_planner/teb_types.h>
 
 /**
  * @brief Base class for graph based path planning / homotopy class sampling
