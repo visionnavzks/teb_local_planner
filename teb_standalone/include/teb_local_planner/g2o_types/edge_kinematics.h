@@ -129,8 +129,9 @@ public:
     double dd_error_2 = deltaS[1]*sin1;
     double dd_dev = penaltyBoundFromBelowDerivative(dd_error_1+dd_error_2, 0,0);
     
-    double dev_nh_abs = g2o::sign( ( cos(conf1->theta())+cos(conf2->theta()) ) * deltaS[1] - 
-	      ( sin(conf1->theta())+sin(conf2->theta()) ) * deltaS[0] );
+    const double nh_component = ( cos(conf1->theta())+cos(conf2->theta()) ) * deltaS[1] - 
+  	      ( sin(conf1->theta())+sin(conf2->theta()) ) * deltaS[0];
+    double dev_nh_abs = nh_component < 0 ? -1.0 : nh_component > 0 ? 1.0 : 0.0;
 	    
     // conf1
     _jacobianOplusXi(0,0) = aux1 * dev_nh_abs; // nh x1

@@ -45,16 +45,10 @@
 #include <cassert>
 #include <iostream>
 
+#include <teb_local_planner/teb_types.h>
+
 namespace teb_local_planner
 {
-
-//! Simple velocity command replacing Twist for standalone usage
-struct Twist
-{
-  double vx = 0;     //!< Linear velocity in x
-  double vy = 0;     //!< Linear velocity in y
-  double omega = 0;  //!< Angular velocity around z
-};
 
 
 /**

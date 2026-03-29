@@ -51,6 +51,7 @@
 #include <teb_local_planner/g2o_types/edge_prefer_rotdir.h>
 
 #include <memory>
+#include <mutex>
 #include <limits>
 
 
@@ -64,9 +65,9 @@ TebOptimalPlanner::TebOptimalPlanner() : cfg_(NULL), obstacles_(NULL), via_point
 {    
 }
   
-TebOptimalPlanner::TebOptimalPlanner(const TebConfig& cfg, ObstContainer* obstacles, TebVisualizationPtr visual, const ViaPointContainer* via_points)
+TebOptimalPlanner::TebOptimalPlanner(const TebConfig& cfg, ObstContainer* obstacles, const ViaPointContainer* via_points)
 {
-  initialize(cfg, obstacles, visual, via_points);
+  initialize(cfg, obstacles, via_points);
 }
 
 TebOptimalPlanner::~TebOptimalPlanner()
@@ -79,7 +80,7 @@ TebOptimalPlanner::~TebOptimalPlanner()
   //g2o::HyperGraphActionLibrary::destroy();
 }
 
-void TebOptimalPlanner::initialize(const TebConfig& cfg, ObstContainer* obstacles, TebVisualizationPtr visual, const ViaPointContainer* via_points)
+void TebOptimalPlanner::initialize(const TebConfig& cfg, ObstContainer* obstacles, const ViaPointContainer* via_points)
 {    
   // init optimizer (set solver and block ordering settings)
   optimizer_ = initOptimizer();
@@ -89,34 +90,13 @@ void TebOptimalPlanner::initialize(const TebConfig& cfg, ObstContainer* obstacle
   via_points_ = via_points;
   cost_ = HUGE_VAL;
   prefer_rotdir_ = RotType::none;
-  setVisualization(visual);
   
   vel_start_.first = true;
-  vel_start_.second.linear.x = 0;
-  vel_start_.second.linear.y = 0;
-  vel_start_.second.angular.z = 0;
+  vel_start_.second = Twist();
 
   vel_goal_.first = true;
-  vel_goal_.second.linear.x = 0;
-  vel_goal_.second.linear.y = 0;
-  vel_goal_.second.angular.z = 0;
+  vel_goal_.second = Twist();
   initialized_ = true;
-}
-
-
-void TebOptimalPlanner::setVisualization(TebVisualizationPtr visualization)
-{
-}
-
-void TebOptimalPlanner::visualize()
-{
-    return;
- 
-  
-  if (teb_.sizePoses() > 0)
-  
-  if (cfg_->trajectory.publish_feedback)
- 
 }
 
 
@@ -126,26 +106,26 @@ void TebOptimalPlanner::visualize()
 void TebOptimalPlanner::registerG2OTypes()
 {
   g2o::Factory* factory = g2o::Factory::instance();
-  factory->registerType("VERTEX_POSE", new g2o::HyperGraphElementCreator<VertexPose>);
-  factory->registerType("VERTEX_TIMEDIFF", new g2o::HyperGraphElementCreator<VertexTimeDiff>);
+  factory->registerType("VERTEX_POSE", std::make_shared<g2o::HyperGraphElementCreator<VertexPose>>());
+  factory->registerType("VERTEX_TIMEDIFF", std::make_shared<g2o::HyperGraphElementCreator<VertexTimeDiff>>());
 
-  factory->registerType("EDGE_TIME_OPTIMAL", new g2o::HyperGraphElementCreator<EdgeTimeOptimal>);
-  factory->registerType("EDGE_SHORTEST_PATH", new g2o::HyperGraphElementCreator<EdgeShortestPath>);
-  factory->registerType("EDGE_VELOCITY", new g2o::HyperGraphElementCreator<EdgeVelocity>);
-  factory->registerType("EDGE_VELOCITY_HOLONOMIC", new g2o::HyperGraphElementCreator<EdgeVelocityHolonomic>);
-  factory->registerType("EDGE_ACCELERATION", new g2o::HyperGraphElementCreator<EdgeAcceleration>);
-  factory->registerType("EDGE_ACCELERATION_START", new g2o::HyperGraphElementCreator<EdgeAccelerationStart>);
-  factory->registerType("EDGE_ACCELERATION_GOAL", new g2o::HyperGraphElementCreator<EdgeAccelerationGoal>);
-  factory->registerType("EDGE_ACCELERATION_HOLONOMIC", new g2o::HyperGraphElementCreator<EdgeAccelerationHolonomic>);
-  factory->registerType("EDGE_ACCELERATION_HOLONOMIC_START", new g2o::HyperGraphElementCreator<EdgeAccelerationHolonomicStart>);
-  factory->registerType("EDGE_ACCELERATION_HOLONOMIC_GOAL", new g2o::HyperGraphElementCreator<EdgeAccelerationHolonomicGoal>);
-  factory->registerType("EDGE_KINEMATICS_DIFF_DRIVE", new g2o::HyperGraphElementCreator<EdgeKinematicsDiffDrive>);
-  factory->registerType("EDGE_KINEMATICS_CARLIKE", new g2o::HyperGraphElementCreator<EdgeKinematicsCarlike>);
-  factory->registerType("EDGE_OBSTACLE", new g2o::HyperGraphElementCreator<EdgeObstacle>);
-  factory->registerType("EDGE_INFLATED_OBSTACLE", new g2o::HyperGraphElementCreator<EdgeInflatedObstacle>);
-  factory->registerType("EDGE_DYNAMIC_OBSTACLE", new g2o::HyperGraphElementCreator<EdgeDynamicObstacle>);
-  factory->registerType("EDGE_VIA_POINT", new g2o::HyperGraphElementCreator<EdgeViaPoint>);
-  factory->registerType("EDGE_PREFER_ROTDIR", new g2o::HyperGraphElementCreator<EdgePreferRotDir>);
+  factory->registerType("EDGE_TIME_OPTIMAL", std::make_shared<g2o::HyperGraphElementCreator<EdgeTimeOptimal>>());
+  factory->registerType("EDGE_SHORTEST_PATH", std::make_shared<g2o::HyperGraphElementCreator<EdgeShortestPath>>());
+  factory->registerType("EDGE_VELOCITY", std::make_shared<g2o::HyperGraphElementCreator<EdgeVelocity>>());
+  factory->registerType("EDGE_VELOCITY_HOLONOMIC", std::make_shared<g2o::HyperGraphElementCreator<EdgeVelocityHolonomic>>());
+  factory->registerType("EDGE_ACCELERATION", std::make_shared<g2o::HyperGraphElementCreator<EdgeAcceleration>>());
+  factory->registerType("EDGE_ACCELERATION_START", std::make_shared<g2o::HyperGraphElementCreator<EdgeAccelerationStart>>());
+  factory->registerType("EDGE_ACCELERATION_GOAL", std::make_shared<g2o::HyperGraphElementCreator<EdgeAccelerationGoal>>());
+  factory->registerType("EDGE_ACCELERATION_HOLONOMIC", std::make_shared<g2o::HyperGraphElementCreator<EdgeAccelerationHolonomic>>());
+  factory->registerType("EDGE_ACCELERATION_HOLONOMIC_START", std::make_shared<g2o::HyperGraphElementCreator<EdgeAccelerationHolonomicStart>>());
+  factory->registerType("EDGE_ACCELERATION_HOLONOMIC_GOAL", std::make_shared<g2o::HyperGraphElementCreator<EdgeAccelerationHolonomicGoal>>());
+  factory->registerType("EDGE_KINEMATICS_DIFF_DRIVE", std::make_shared<g2o::HyperGraphElementCreator<EdgeKinematicsDiffDrive>>());
+  factory->registerType("EDGE_KINEMATICS_CARLIKE", std::make_shared<g2o::HyperGraphElementCreator<EdgeKinematicsCarlike>>());
+  factory->registerType("EDGE_OBSTACLE", std::make_shared<g2o::HyperGraphElementCreator<EdgeObstacle>>());
+  factory->registerType("EDGE_INFLATED_OBSTACLE", std::make_shared<g2o::HyperGraphElementCreator<EdgeInflatedObstacle>>());
+  factory->registerType("EDGE_DYNAMIC_OBSTACLE", std::make_shared<g2o::HyperGraphElementCreator<EdgeDynamicObstacle>>());
+  factory->registerType("EDGE_VIA_POINT", std::make_shared<g2o::HyperGraphElementCreator<EdgeViaPoint>>());
+  factory->registerType("EDGE_PREFER_ROTDIR", std::make_shared<g2o::HyperGraphElementCreator<EdgePreferRotDir>>());
   return;
 }
 
@@ -156,8 +136,8 @@ void TebOptimalPlanner::registerG2OTypes()
 boost::shared_ptr<g2o::SparseOptimizer> TebOptimalPlanner::initOptimizer()
 {
   // Call register_g2o_types once, even for multiple TebOptimalPlanner instances (thread-safe)
-  static boost::once_flag flag = BOOST_ONCE_INIT;
-  boost::call_once(&registerG2OTypes, flag);  
+  static std::once_flag flag;
+  std::call_once(flag, &registerG2OTypes);
 
   // allocating the optimizer
   boost::shared_ptr<g2o::SparseOptimizer> optimizer = boost::make_shared<g2o::SparseOptimizer>();
@@ -228,9 +208,7 @@ bool TebOptimalPlanner::optimizeTEB(int iterations_innerloop, int iterations_out
 void TebOptimalPlanner::setVelocityStart(const Twist& vel_start)
 {
   vel_start_.first = true;
-  vel_start_.second.linear.x = vel_start.linear.x;
-  vel_start_.second.linear.y = vel_start.linear.y;
-  vel_start_.second.angular.z = vel_start.angular.z;
+  vel_start_.second = vel_start;
 }
 
 void TebOptimalPlanner::setVelocityGoal(const Twist& vel_goal)
@@ -242,15 +220,26 @@ void TebOptimalPlanner::setVelocityGoal(const Twist& vel_goal)
 bool TebOptimalPlanner::plan(const std::vector<PoseSE2>& initial_plan, const Twist* start_vel, bool free_goal_vel)
 {    
   assert(initialized_);
+  auto fun_position = [](const PoseSE2& pose) -> Eigen::Vector2d { return pose.position(); };
+  boost::optional<double> start_orientation = boost::none;
+  boost::optional<double> goal_orientation = boost::none;
+  if (!cfg_->trajectory.global_plan_overwrite_orientation)
+  {
+    start_orientation = initial_plan.front().theta();
+    goal_orientation = initial_plan.back().theta();
+  }
+
   if (!teb_.isInit())
   {
-    teb_.initTrajectoryToGoal(initial_plan, cfg_->robot.max_vel_x, cfg_->robot.max_vel_theta, cfg_->trajectory.global_plan_overwrite_orientation,
+    teb_.initTrajectoryToGoal(initial_plan.begin(), initial_plan.end(), fun_position,
+      cfg_->robot.max_vel_x, cfg_->robot.max_vel_theta,
+      boost::none, boost::none, start_orientation, goal_orientation,
       cfg_->trajectory.min_samples, cfg_->trajectory.allow_init_with_backwards_motion);
   }
   else // warm start
   {
-    PoseSE2 start_(initial_plan.front().pose);
-    PoseSE2 goal_(initial_plan.back().pose);
+    PoseSE2 start_(initial_plan.front());
+    PoseSE2 goal_(initial_plan.back());
     if (teb_.sizePoses()>0
         && (goal_.position() - teb_.BackPose().position()).norm() < cfg_->trajectory.force_reinit_new_goal_dist
         && fabs(g2o::normalize_theta(goal_.theta() - teb_.BackPose().theta())) < cfg_->trajectory.force_reinit_new_goal_angular) // actual warm start!
@@ -258,7 +247,9 @@ bool TebOptimalPlanner::plan(const std::vector<PoseSE2>& initial_plan, const Twi
     else // goal too far away -> reinit
     {
       teb_.clearTimedElasticBand();
-      teb_.initTrajectoryToGoal(initial_plan, cfg_->robot.max_vel_x, cfg_->robot.max_vel_theta, cfg_->trajectory.global_plan_overwrite_orientation,
+      teb_.initTrajectoryToGoal(initial_plan.begin(), initial_plan.end(), fun_position,
+        cfg_->robot.max_vel_x, cfg_->robot.max_vel_theta,
+        boost::none, boost::none, start_orientation, goal_orientation,
         cfg_->trajectory.min_samples, cfg_->trajectory.allow_init_with_backwards_motion);
     }
   }
@@ -273,13 +264,6 @@ bool TebOptimalPlanner::plan(const std::vector<PoseSE2>& initial_plan, const Twi
   return optimizeTEB(cfg_->optim.no_inner_iterations, cfg_->optim.no_outer_iterations);
 }
 
-
-bool TebOptimalPlanner::plan(const PoseSE2& start, const PoseSE2& goal, const Twist* start_vel, bool free_goal_vel)
-{
-  PoseSE2 start_(start);
-  PoseSE2 goal_(goal);
-  return plan(start_, goal_, start_vel);
-}
 
 bool TebOptimalPlanner::plan(const PoseSE2& start, const PoseSE2& goal, const Twist* start_vel, bool free_goal_vel)
 {	
@@ -1097,7 +1081,7 @@ void TebOptimalPlanner::extractVelocity(const PoseSE2& pose1, const PoseSE2& pos
     Eigen::Vector2d conf1dir( cos(pose1.theta()), sin(pose1.theta()) );
     // translational velocity
     double dir = deltaS.dot(conf1dir);
-    vx = (double) g2o::sign(dir) * deltaS.norm()/dt;
+    vx = (dir < 0 ? -1.0 : dir > 0 ? 1.0 : 0.0) * deltaS.norm()/dt;
     vy = 0;
   }
   else // holonomic robot
@@ -1153,140 +1137,21 @@ bool TebOptimalPlanner::getVelocityCommand(double& vx, double& vy, double& omega
   return true;
 }
 
-void TebOptimalPlanner::getVelocityProfile(std::vector<Twist>& velocity_profile) const
+void TebOptimalPlanner::getVelocityProfile(std::vector<Eigen::Vector3d>& velocity_profile) const
 {
   int n = teb_.sizePoses();
   velocity_profile.resize( n+1 );
 
   // start velocity 
-  velocity_profile.front().linear.z = 0;
-  velocity_profile.front().angular.x = velocity_profile.front().angular.y = 0;  
-  velocity_profile.front().linear.x = vel_start_.second.linear.x;
-  velocity_profile.front().linear.y = vel_start_.second.linear.y;
-  velocity_profile.front().angular.z = vel_start_.second.angular.z;
+  velocity_profile.front() = Eigen::Vector3d(vel_start_.second.linear.x, vel_start_.second.linear.y, vel_start_.second.angular.z);
   
   for (int i=1; i<n; ++i)
   {
-    velocity_profile[i].linear.z = 0;
-    velocity_profile[i].angular.x = velocity_profile[i].angular.y = 0;
-    extractVelocity(teb_.Pose(i-1), teb_.Pose(i), teb_.TimeDiff(i-1), velocity_profile[i].linear.x, velocity_profile[i].linear.y, velocity_profile[i].angular.z);
+    extractVelocity(teb_.Pose(i-1), teb_.Pose(i), teb_.TimeDiff(i-1), velocity_profile[i][0], velocity_profile[i][1], velocity_profile[i][2]);
   }
   
   // goal velocity
-  velocity_profile.back().linear.z = 0;
-  velocity_profile.back().angular.x = velocity_profile.back().angular.y = 0;  
-  velocity_profile.back().linear.x = vel_goal_.second.linear.x;
-  velocity_profile.back().linear.y = vel_goal_.second.linear.y;
-  velocity_profile.back().angular.z = vel_goal_.second.angular.z;
-}
-
-void TebOptimalPlanner::getFullTrajectory(std::vector<TrajectoryPointMsg>& trajectory) const
-{
-  int n = teb_.sizePoses();
-  
-  trajectory.resize(n);
-  
-  if (n == 0)
-    return;
-     
-  double curr_time = 0;
-  
-  // start
-  TrajectoryPointMsg& start = trajectory.front();
-  teb_.Pose(0).toPoseMsg(start.pose);
-  start.velocity.linear.z = 0;
-  start.velocity.angular.x = start.velocity.angular.y = 0;
-  start.velocity.linear.x = vel_start_.second.linear.x;
-  start.velocity.linear.y = vel_start_.second.linear.y;
-  start.velocity.angular.z = vel_start_.second.angular.z;
-  start.time_from_start.fromSec(curr_time);
-  
-  curr_time += teb_.TimeDiff(0);
-  
-  // intermediate points
-  for (int i=1; i < n-1; ++i)
-  {
-    TrajectoryPointMsg& point = trajectory[i];
-    teb_.Pose(i).toPoseMsg(point.pose);
-    point.velocity.linear.z = 0;
-    point.velocity.angular.x = point.velocity.angular.y = 0;
-    double vel1_x, vel1_y, vel2_x, vel2_y, omega1, omega2;
-    extractVelocity(teb_.Pose(i-1), teb_.Pose(i), teb_.TimeDiff(i-1), vel1_x, vel1_y, omega1);
-    extractVelocity(teb_.Pose(i), teb_.Pose(i+1), teb_.TimeDiff(i), vel2_x, vel2_y, omega2);
-    point.velocity.linear.x = 0.5*(vel1_x+vel2_x);
-    point.velocity.linear.y = 0.5*(vel1_y+vel2_y);
-    point.velocity.angular.z = 0.5*(omega1+omega2);    
-    point.time_from_start.fromSec(curr_time);
-    
-    curr_time += teb_.TimeDiff(i);
-  }
-  
-  // goal
-  TrajectoryPointMsg& goal = trajectory.back();
-  teb_.BackPose().toPoseMsg(goal.pose);
-  goal.velocity.linear.z = 0;
-  goal.velocity.angular.x = goal.velocity.angular.y = 0;
-  goal.velocity.linear.x = vel_goal_.second.linear.x;
-  goal.velocity.linear.y = vel_goal_.second.linear.y;
-  goal.velocity.angular.z = vel_goal_.second.angular.z;
-  goal.time_from_start.fromSec(curr_time);
-}
-
-
-bool TebOptimalPlanner::isTrajectoryFeasible(void* costmap_model, const std::vector<Eigen::Vector2d>& footprint_spec,
-                                             double inscribed_radius, double circumscribed_radius, int look_ahead_idx, double feasibility_check_lookahead_distance)
-{
-  if (look_ahead_idx < 0 || look_ahead_idx >= teb().sizePoses())
-    look_ahead_idx = teb().sizePoses() - 1;
-
-  if (feasibility_check_lookahead_distance > 0){
-    for (int i=1; i < teb().sizePoses(); ++i){
-      double pose_distance=std::hypot(teb().Pose(i).x()-teb().Pose(0).x(), teb().Pose(i).y()-teb().Pose(0).y());
-      if(pose_distance > feasibility_check_lookahead_distance){
-        look_ahead_idx = i - 1;
-        break;
-      }
-    }
-  }
-
-  for (int i=0; i <= look_ahead_idx; ++i)
-  {           
-    if ( costmap_model->footprintCost(teb().Pose(i).x(), teb().Pose(i).y(), teb().Pose(i).theta(), footprint_spec, inscribed_radius, circumscribed_radius) == -1 )
-    {
-      {
-      }
-      return false;
-    }
-    // Checks if the distance between two poses is higher than the robot radius or the orientation diff is bigger than the specified threshold
-    // and interpolates in that case.
-    // (if obstacles are pushing two consecutive poses away, the center between two consecutive poses might coincide with the obstacle ;-)!
-    if (i<look_ahead_idx)
-    {
-      double delta_rot = g2o::normalize_theta(g2o::normalize_theta(teb().Pose(i+1).theta()) -
-                                              g2o::normalize_theta(teb().Pose(i).theta()));
-      Eigen::Vector2d delta_dist = teb().Pose(i+1).position()-teb().Pose(i).position();
-      if(fabs(delta_rot) > cfg_->trajectory.min_resolution_collision_check_angular || delta_dist.norm() > inscribed_radius)
-      {
-        int n_additional_samples = std::max(std::ceil(fabs(delta_rot) / cfg_->trajectory.min_resolution_collision_check_angular), 
-                                            std::ceil(delta_dist.norm() / inscribed_radius)) - 1;
-        PoseSE2 intermediate_pose = teb().Pose(i);
-        for(int step = 0; step < n_additional_samples; ++step)
-        {
-          intermediate_pose.position() = intermediate_pose.position() + delta_dist / (n_additional_samples + 1.0);
-          intermediate_pose.theta() = g2o::normalize_theta(intermediate_pose.theta() + 
-                                                           delta_rot / (n_additional_samples + 1.0));
-          if ( costmap_model->footprintCost(intermediate_pose.x(), intermediate_pose.y(), intermediate_pose.theta(),
-            footprint_spec, inscribed_radius, circumscribed_radius) == -1 )
-          {
-            {
-            }
-            return false;
-          }
-        }
-      }
-    }
-  }
-  return true;
+  velocity_profile.back() = Eigen::Vector3d(vel_goal_.second.linear.x, vel_goal_.second.linear.y, vel_goal_.second.angular.z);
 }
 
 } // namespace teb_local_planner

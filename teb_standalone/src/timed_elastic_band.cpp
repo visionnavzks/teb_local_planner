@@ -384,11 +384,13 @@ bool TimedElasticBand::initTrajectoryToGoal(const PoseSE2& start, const PoseSE2&
 
 bool TimedElasticBand::initTrajectoryToGoal(const std::vector<PoseSE2>& plan, double max_vel_x, double max_vel_theta, bool estimate_orient, int min_samples, bool guess_backwards_motion)
 {
+  if (plan.size() < 2)
+    return false;
   
   if (!isInit())
   {
-    PoseSE2 start(plan.front().pose);
-    PoseSE2 goal(plan.back().pose);
+    PoseSE2 start(plan.front());
+    PoseSE2 goal(plan.back());
     
     addPose(start); // add starting point with given orientation
     setPoseVertexFixed(0,true); // StartConf is a fixed constraint during optimization
@@ -404,17 +406,17 @@ bool TimedElasticBand::initTrajectoryToGoal(const std::vector<PoseSE2>& plan, do
         if (estimate_orient)
         {
             // get yaw from the orientation of the distance vector between pose_{i+1} and pose_{i}
-            double dx = plan[i+1].pose.position.x - plan[i].pose.position.x;
-            double dy = plan[i+1].pose.position.y - plan[i].pose.position.y;
+          double dx = plan[i+1].x() - plan[i].x();
+          double dy = plan[i+1].y() - plan[i].y();
             yaw = std::atan2(dy,dx);
             if (backwards)
                 yaw = g2o::normalize_theta(yaw+M_PI);
         }
         else 
         {
-            yaw = std::atan2(2.0, 1.0); // TODO getYaw replaced //(plan[i].pose.orientation);
+          yaw = plan[i].theta();
         }
-        PoseSE2 intermediate_pose(plan[i].pose.position.x, plan[i].pose.position.y, yaw);
+        PoseSE2 intermediate_pose(plan[i].x(), plan[i].y(), yaw);
         double dt = estimateDeltaT(BackPose(), intermediate_pose, max_vel_x, max_vel_theta);
         addPoseAndTimeDiff(intermediate_pose, dt);
     }

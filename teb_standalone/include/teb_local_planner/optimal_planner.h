@@ -56,8 +56,7 @@
 #include <g2o/core/factory.h>
 #include <g2o/core/optimization_algorithm_gauss_newton.h>
 #include <g2o/core/optimization_algorithm_levenberg.h>
-#include <g2o/solvers/csparse/linear_solver_csparse.h>
-#include <g2o/solvers/cholmod/linear_solver_cholmod.h>
+#include <g2o/solvers/eigen/linear_solver_eigen.h>
 
 #include <limits.h>
 
@@ -68,8 +67,7 @@ namespace teb_local_planner
 typedef g2o::BlockSolver< g2o::BlockSolverTraits<-1, -1> >  TEBBlockSolver;
 
 //! Typedef for the linear solver utilized for optimization
-typedef g2o::LinearSolverCSparse<TEBBlockSolver::PoseMatrixType> TEBLinearSolver;
-//typedef g2o::LinearSolverCholmod<TEBBlockSolver::PoseMatrixType> TEBLinearSolver;
+typedef g2o::LinearSolverEigen<TEBBlockSolver::PoseMatrixType> TEBLinearSolver;
 
 //! Typedef for a container storing via-points
 typedef std::vector< Eigen::Vector2d, Eigen::aligned_allocator<Eigen::Vector2d> > ViaPointContainer;
@@ -140,6 +138,8 @@ public:
    * @return \c true if planning was successful, \c false otherwise
    */
   virtual bool plan(const PoseSE2& start, const PoseSE2& goal, const Twist* start_vel = NULL, bool free_goal_vel=false);
+
+  bool plan(const std::vector<PoseSE2>& initial_plan, const Twist* start_vel = NULL, bool free_goal_vel=false);
   
   
   /**
@@ -585,8 +585,8 @@ protected:
   // internal objects (memory management owned)
   TimedElasticBand teb_; //!< Actual trajectory object
   boost::shared_ptr<g2o::SparseOptimizer> optimizer_; //!< g2o optimizer for trajectory optimization
-  std::pair<bool, Eigen::Vector3d> vel_start_; //!< Store the initial velocity at the start pose (vx, vy, omega)
-  std::pair<bool, Eigen::Vector3d> vel_goal_; //!< Store the final velocity at the goal pose (vx, vy, omega)
+  std::pair<bool, Twist> vel_start_; //!< Store the initial velocity at the start pose (vx, vy, omega)
+  std::pair<bool, Twist> vel_goal_; //!< Store the final velocity at the goal pose (vx, vy, omega)
 
   bool initialized_; //!< Keeps track about the correct initialization of this class
   bool optimized_; //!< This variable is \c true as long as the last optimization has been completed successful

@@ -14,9 +14,43 @@
 #include <teb_local_planner/teb_config.h>
 #include <teb_local_planner/timed_elastic_band.h>
 #include <teb_local_planner/optimal_planner.h>
+#ifdef TEB_STANDALONE_WITH_HOMOTOPY
 #include <teb_local_planner/homotopy_class_planner.h>
+#endif
+
+#include <boost/shared_ptr.hpp>
 
 #include <sstream>
+
+namespace {
+
+struct PyObstacleContainer {
+    teb_local_planner::ObstContainer storage;
+};
+
+struct PyViaPointContainer {
+    teb_local_planner::ViaPointContainer storage;
+};
+
+std::vector<teb_local_planner::PoseSE2> collectPoses(const teb_local_planner::TimedElasticBand& teb) {
+    std::vector<teb_local_planner::PoseSE2> poses;
+    poses.reserve(static_cast<std::size_t>(teb.sizePoses()));
+    for (int index = 0; index < teb.sizePoses(); ++index) {
+        poses.push_back(teb.Pose(index));
+    }
+    return poses;
+}
+
+std::vector<double> collectTimeDiffs(const teb_local_planner::TimedElasticBand& teb) {
+    std::vector<double> time_diffs;
+    time_diffs.reserve(static_cast<std::size_t>(teb.sizeTimeDiffs()));
+    for (int index = 0; index < teb.sizeTimeDiffs(); ++index) {
+        time_diffs.push_back(teb.TimeDiff(index));
+    }
+    return time_diffs;
+}
+
+}  // namespace
 
 // Declare boost::shared_ptr as a holder type for pybind11
 PYBIND11_DECLARE_HOLDER_TYPE(T, boost::shared_ptr<T>)
@@ -293,6 +327,51 @@ PYBIND11_MODULE(pyteb, m) {
             os << "PolygonObstacle(vertices=" << o.noVertices() << ")";
             return os.str();
         });
+
+    py::class_<PyObstacleContainer>(m, "ObstacleContainer")
+        .def(py::init<>())
+        .def("append", [](PyObstacleContainer& container, const boost::shared_ptr<Obstacle>& obstacle) {
+            container.storage.push_back(obstacle);
+        }, py::arg("obstacle"))
+        .def("clear", [](PyObstacleContainer& container) {
+            container.storage.clear();
+        })
+        .def("__len__", [](const PyObstacleContainer& container) {
+            return container.storage.size();
+        })
+        .def("__getitem__", [](const PyObstacleContainer& container, std::size_t index) {
+            if (index >= container.storage.size()) {
+                throw py::index_error();
+            }
+            return container.storage.at(index);
+        })
+        .def("__iter__", [](PyObstacleContainer& container) {
+            return py::make_iterator(container.storage.begin(), container.storage.end());
+        }, py::keep_alive<0, 1>());
+
+    py::class_<PyViaPointContainer>(m, "ViaPointContainer")
+        .def(py::init<>())
+        .def("append", [](PyViaPointContainer& container, const Eigen::Ref<const Eigen::Vector2d>& via_point) {
+            container.storage.push_back(via_point);
+        }, py::arg("via_point"))
+        .def("appendXY", [](PyViaPointContainer& container, double x, double y) {
+            container.storage.emplace_back(x, y);
+        }, py::arg("x"), py::arg("y"))
+        .def("clear", [](PyViaPointContainer& container) {
+            container.storage.clear();
+        })
+        .def("__len__", [](const PyViaPointContainer& container) {
+            return container.storage.size();
+        })
+        .def("__getitem__", [](const PyViaPointContainer& container, std::size_t index) {
+            if (index >= container.storage.size()) {
+                throw py::index_error();
+            }
+            return container.storage.at(index);
+        })
+        .def("__iter__", [](PyViaPointContainer& container) {
+            return py::make_iterator(container.storage.begin(), container.storage.end());
+        }, py::keep_alive<0, 1>());
 
     // -----------------------------------------------------------------------
     // Robot footprint models
@@ -574,6 +653,8 @@ PYBIND11_MODULE(pyteb, m) {
         .def("isTrajectoryInsideRegion", &TimedElasticBand::isTrajectoryInsideRegion,
              py::arg("radius"), py::arg("max_dist_behind_robot") = -1.0,
              py::arg("skip_poses") = 0)
+           .def("poses", &collectPoses)
+           .def("timeDiffs", &collectTimeDiffs)
         .def("__repr__", [](const TimedElasticBand& teb) {
             std::ostringstream os;
             os << "TimedElasticBand(poses=" << teb.sizePoses()
@@ -594,15 +675,32 @@ PYBIND11_MODULE(pyteb, m) {
     // -----------------------------------------------------------------------
     py::class_<TebOptimalPlanner, PlannerInterface, boost::shared_ptr<TebOptimalPlanner>>(m, "TebOptimalPlanner")
         .def(py::init<>())
-        .def(py::init<const TebConfig&, ObstContainer*, const ViaPointContainer*>(),
-             py::arg("cfg"), py::arg("obstacles") = nullptr, py::arg("via_points") = nullptr)
-        .def("initialize", &TebOptimalPlanner::initialize,
-             py::arg("cfg"), py::arg("obstacles") = nullptr, py::arg("via_points") = nullptr)
-        .def("plan",
-             static_cast<bool (TebOptimalPlanner::*)(const PoseSE2&, const PoseSE2&, const Eigen::Vector3d*, bool)>(
-                 &TebOptimalPlanner::plan),
-             py::arg("start"), py::arg("goal"),
-             py::arg("start_vel") = nullptr, py::arg("free_goal_vel") = false)
+        .def(py::init([](const TebConfig& cfg) {
+            return new TebOptimalPlanner(cfg, nullptr, nullptr);
+        }), py::arg("cfg"))
+        .def(py::init([](const TebConfig& cfg, PyObstacleContainer& obstacles) {
+            return new TebOptimalPlanner(cfg, &obstacles.storage, nullptr);
+        }), py::arg("cfg"), py::arg("obstacles"), py::keep_alive<1, 3>())
+        .def(py::init([](const TebConfig& cfg, PyObstacleContainer& obstacles, PyViaPointContainer& via_points) {
+            return new TebOptimalPlanner(cfg, &obstacles.storage, &via_points.storage);
+        }), py::arg("cfg"), py::arg("obstacles"), py::arg("via_points"),
+             py::keep_alive<1, 3>(), py::keep_alive<1, 4>())
+        .def("initialize", [](TebOptimalPlanner& planner, const TebConfig& cfg) {
+            planner.initialize(cfg, nullptr, nullptr);
+        }, py::arg("cfg"))
+        .def("initialize", [](TebOptimalPlanner& planner, const TebConfig& cfg, PyObstacleContainer& obstacles) {
+            planner.initialize(cfg, &obstacles.storage, nullptr);
+        }, py::arg("cfg"), py::arg("obstacles"), py::keep_alive<1, 3>())
+        .def("initialize", [](TebOptimalPlanner& planner, const TebConfig& cfg, PyObstacleContainer& obstacles, PyViaPointContainer& via_points) {
+            planner.initialize(cfg, &obstacles.storage, &via_points.storage);
+        }, py::arg("cfg"), py::arg("obstacles"), py::arg("via_points"),
+             py::keep_alive<1, 3>(), py::keep_alive<1, 4>())
+        .def("plan", [](TebOptimalPlanner& planner, const PoseSE2& start, const PoseSE2& goal, bool free_goal_vel) {
+            return planner.plan(start, goal, nullptr, free_goal_vel);
+        }, py::arg("start"), py::arg("goal"), py::arg("free_goal_vel") = false)
+        .def("plan", [](TebOptimalPlanner& planner, const PoseSE2& start, const PoseSE2& goal, const Twist& start_vel, bool free_goal_vel) {
+            return planner.plan(start, goal, &start_vel, free_goal_vel);
+        }, py::arg("start"), py::arg("goal"), py::arg("start_vel"), py::arg("free_goal_vel") = false)
         .def("getVelocityCommand",
              [](const TebOptimalPlanner& planner, int look_ahead_poses) {
                  double vx = 0, vy = 0, omega = 0;
@@ -618,8 +716,12 @@ PYBIND11_MODULE(pyteb, m) {
         .def("setVelocityStart", &TebOptimalPlanner::setVelocityStart, py::arg("vel_start"))
         .def("setVelocityGoal", &TebOptimalPlanner::setVelocityGoal, py::arg("vel_goal"))
         .def("setVelocityGoalFree", &TebOptimalPlanner::setVelocityGoalFree)
-        .def("setObstVector", &TebOptimalPlanner::setObstVector, py::arg("obst_vector"))
-        .def("setViaPoints", &TebOptimalPlanner::setViaPoints, py::arg("via_points"))
+        .def("setObstVector", [](TebOptimalPlanner& planner, PyObstacleContainer& obstacles) {
+            planner.setObstVector(&obstacles.storage);
+        }, py::arg("obstacles"), py::keep_alive<1, 2>())
+        .def("setViaPoints", [](TebOptimalPlanner& planner, PyViaPointContainer& via_points) {
+            planner.setViaPoints(&via_points.storage);
+        }, py::arg("via_points"), py::keep_alive<1, 2>())
         .def("teb", static_cast<TimedElasticBand& (TebOptimalPlanner::*)()>(&TebOptimalPlanner::teb),
              py::return_value_policy::reference_internal)
         .def("clearPlanner", &TebOptimalPlanner::clearPlanner)
@@ -633,20 +735,38 @@ PYBIND11_MODULE(pyteb, m) {
              py::arg("alternative_time_cost") = false)
         .def("getCurrentCost", &TebOptimalPlanner::getCurrentCost);
 
+#ifdef TEB_STANDALONE_WITH_HOMOTOPY
     // -----------------------------------------------------------------------
     // HomotopyClassPlanner
     // -----------------------------------------------------------------------
     py::class_<HomotopyClassPlanner, PlannerInterface, boost::shared_ptr<HomotopyClassPlanner>>(m, "HomotopyClassPlanner")
         .def(py::init<>())
-        .def(py::init<const TebConfig&, ObstContainer*, const ViaPointContainer*>(),
-             py::arg("cfg"), py::arg("obstacles") = nullptr, py::arg("via_points") = nullptr)
-        .def("initialize", &HomotopyClassPlanner::initialize,
-             py::arg("cfg"), py::arg("obstacles") = nullptr, py::arg("via_points") = nullptr)
-        .def("plan",
-             static_cast<bool (HomotopyClassPlanner::*)(const PoseSE2&, const PoseSE2&, const Eigen::Vector3d*, bool)>(
-                 &HomotopyClassPlanner::plan),
-             py::arg("start"), py::arg("goal"),
-             py::arg("start_vel") = nullptr, py::arg("free_goal_vel") = false)
+        .def(py::init([](const TebConfig& cfg) {
+            return new HomotopyClassPlanner(cfg, nullptr, nullptr);
+        }), py::arg("cfg"))
+        .def(py::init([](const TebConfig& cfg, PyObstacleContainer& obstacles) {
+            return new HomotopyClassPlanner(cfg, &obstacles.storage, nullptr);
+        }), py::arg("cfg"), py::arg("obstacles"), py::keep_alive<1, 3>())
+        .def(py::init([](const TebConfig& cfg, PyObstacleContainer& obstacles, PyViaPointContainer& via_points) {
+            return new HomotopyClassPlanner(cfg, &obstacles.storage, &via_points.storage);
+        }), py::arg("cfg"), py::arg("obstacles"), py::arg("via_points"),
+             py::keep_alive<1, 3>(), py::keep_alive<1, 4>())
+        .def("initialize", [](HomotopyClassPlanner& planner, const TebConfig& cfg) {
+            planner.initialize(cfg, nullptr, nullptr);
+        }, py::arg("cfg"))
+        .def("initialize", [](HomotopyClassPlanner& planner, const TebConfig& cfg, PyObstacleContainer& obstacles) {
+            planner.initialize(cfg, &obstacles.storage, nullptr);
+        }, py::arg("cfg"), py::arg("obstacles"), py::keep_alive<1, 3>())
+        .def("initialize", [](HomotopyClassPlanner& planner, const TebConfig& cfg, PyObstacleContainer& obstacles, PyViaPointContainer& via_points) {
+            planner.initialize(cfg, &obstacles.storage, &via_points.storage);
+        }, py::arg("cfg"), py::arg("obstacles"), py::arg("via_points"),
+             py::keep_alive<1, 3>(), py::keep_alive<1, 4>())
+        .def("plan", [](HomotopyClassPlanner& planner, const PoseSE2& start, const PoseSE2& goal, bool free_goal_vel) {
+            return planner.plan(start, goal, nullptr, free_goal_vel);
+        }, py::arg("start"), py::arg("goal"), py::arg("free_goal_vel") = false)
+        .def("plan", [](HomotopyClassPlanner& planner, const PoseSE2& start, const PoseSE2& goal, const Twist& start_vel, bool free_goal_vel) {
+            return planner.plan(start, goal, &start_vel, free_goal_vel);
+        }, py::arg("start"), py::arg("goal"), py::arg("start_vel"), py::arg("free_goal_vel") = false)
         .def("getVelocityCommand",
              [](const HomotopyClassPlanner& planner, int look_ahead_poses) {
                  double vx = 0, vy = 0, omega = 0;
@@ -667,6 +787,7 @@ PYBIND11_MODULE(pyteb, m) {
                  &HomotopyClassPlanner::computeCurrentCost),
              py::arg("cost"), py::arg("obst_cost_scale") = 1.0,
              py::arg("viapoint_cost_scale") = 1.0, py::arg("alternative_time_cost") = false);
+#endif
 
     // -----------------------------------------------------------------------
     // Distance calculation free functions

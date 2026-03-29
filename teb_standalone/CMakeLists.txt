@@ -32,8 +32,6 @@ find_package(G2O REQUIRED)
 # teb_local_planner_standalone library
 # ---------------------------------------------------------------------------
 set(TEB_STANDALONE_SOURCES
-  src/graph_search.cpp
-  src/homotopy_class_planner.cpp
   src/obstacles.cpp
   src/optimal_planner.cpp
   src/recovery_behaviors.cpp
@@ -41,13 +39,40 @@ set(TEB_STANDALONE_SOURCES
   src/timed_elastic_band.cpp
 )
 
+option(TEB_STANDALONE_BUILD_HOMOTOPY "Build standalone homotopy planner support" OFF)
+
+if(TEB_STANDALONE_BUILD_HOMOTOPY)
+  list(APPEND TEB_STANDALONE_SOURCES
+    src/graph_search.cpp
+    src/homotopy_class_planner.cpp
+  )
+endif()
+
 add_library(teb_local_planner_standalone ${TEB_STANDALONE_SOURCES})
+
+if(TEB_STANDALONE_BUILD_HOMOTOPY)
+  target_compile_definitions(teb_local_planner_standalone PUBLIC TEB_STANDALONE_WITH_HOMOTOPY=1)
+endif()
 
 target_include_directories(teb_local_planner_standalone PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   ${SUITESPARSE_INCLUDE_DIRS}
   ${G2O_INCLUDE_DIR}
 )
+
+if(SUITESPARSE_LIBRARY_DIR)
+  target_link_directories(teb_local_planner_standalone PUBLIC ${SUITESPARSE_LIBRARY_DIR})
+endif()
+
+if(SUITESPARSE_METIS_LIBRARY)
+  get_filename_component(SUITESPARSE_METIS_LIBRARY_DIR ${SUITESPARSE_METIS_LIBRARY} DIRECTORY)
+  target_link_directories(teb_local_planner_standalone PUBLIC ${SUITESPARSE_METIS_LIBRARY_DIR})
+endif()
+
+if(SUITESPARSE_SPQR_LIBRARY)
+  get_filename_component(SUITESPARSE_SPQR_LIBRARY_DIR ${SUITESPARSE_SPQR_LIBRARY} DIRECTORY)
+  target_link_directories(teb_local_planner_standalone PUBLIC ${SUITESPARSE_SPQR_LIBRARY_DIR})
+endif()
 
 # Eigen3 may export a target or just variables depending on the version.
 if(TARGET Eigen3::Eigen)
@@ -62,13 +87,6 @@ target_link_libraries(teb_local_planner_standalone PUBLIC
   Boost::graph
   ${SUITESPARSE_LIBRARIES}
   ${G2O_LIBRARIES}
-  g2o_core
-  g2o_stuff
-  g2o_csparse_extension
-  g2o_solver_csparse
-  g2o_solver_cholmod
-  g2o_types_slam2d
-  g2o_types_slam3d
 )
 
 # Force-include the Boost compatibility header so that every translation unit

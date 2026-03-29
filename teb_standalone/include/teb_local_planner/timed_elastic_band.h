@@ -363,6 +363,15 @@ public:
    * @return true if everything was fine, false otherwise
    */
   bool initTrajectoryToGoal(const PoseSE2& start, const PoseSE2& goal, double diststep=0, double max_vel_x=0.5, int min_samples = 3, bool guess_backwards_motion = false);
+
+  /**
+   * @brief Initialize a trajectory from a pose sequence.
+   *
+   * The provided plan already contains poses, so orientation can either be
+   * estimated from neighboring positions or copied from each pose directly.
+   */
+  bool initTrajectoryToGoal(const std::vector<PoseSE2>& plan, double max_vel_x, double max_vel_theta,
+                            bool estimate_orient, int min_samples = 3, bool guess_backwards_motion = false);
   
   
   /**

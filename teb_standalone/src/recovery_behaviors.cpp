@@ -54,8 +54,8 @@ void FailureDetector::update(const Twist& twist, double v_max, double v_backward
         return;
     
     VelMeasurement measurement;
-    measurement.v = twist.linear.x; // just consider linear velocity in x-direction in the robot frame for now
-    measurement.omega = twist.angular.z;
+    measurement.v = twist.linear_x; // just consider linear velocity in x-direction in the robot frame for now
+    measurement.omega = twist.angular_z;
     
     if (measurement.v > 0 && v_max>0)
         measurement.v /= v_max;
@@ -99,8 +99,13 @@ bool FailureDetector::detect(double v_eps, double omega_eps)
     {
         v_mean += buffer_[i].v;
         omega_mean += buffer_[i].omega;
-        if ( i>0 && g2o::sign(buffer_[i].omega) != g2o::sign(buffer_[i-1].omega) )
+        if (i > 0)
+        {
+            const double current_sign = buffer_[i].omega < 0 ? -1.0 : buffer_[i].omega > 0 ? 1.0 : 0.0;
+            const double previous_sign = buffer_[i-1].omega < 0 ? -1.0 : buffer_[i-1].omega > 0 ? 1.0 : 0.0;
+            if (current_sign != previous_sign)
             ++omega_zero_crossings;
+        }
     }
     v_mean /= n;
     omega_mean /= n;
