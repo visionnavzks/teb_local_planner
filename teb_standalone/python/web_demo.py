@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import random
 import sys
+import time
 
 try:
     import numpy as np
@@ -155,6 +156,7 @@ PARAMETER_TABS = [
             make_custom_field("goal_x", "goal_x", DEMO_DEFAULT_OVERRIDES["goal_x"], "float", "scene.goal_x", step=0.1, min_value=X_LIMITS[0], max_value=X_LIMITS[1]),
             make_custom_field("goal_y", "goal_y", DEMO_DEFAULT_OVERRIDES["goal_y"], "float", "scene.goal_y", step=0.1, min_value=Y_LIMITS[0], max_value=Y_LIMITS[1]),
             make_custom_field("robot_radius", "robot_radius", DEMO_DEFAULT_OVERRIDES["robot_radius"], "float", "scene.robot_radius", step=0.01, min_value=0.05, max_value=1.0),
+            make_custom_field("auto_replan", "auto_replan", True, "bool", "scene.auto_replan"),
         ],
     },
     {
@@ -336,6 +338,7 @@ PARAMETER_TABS = [
 ALL_PARAMETER_FIELDS = [field for tab in PARAMETER_TABS for field in tab["fields"]]
 CONTROL_DEFAULTS = {field["id"]: field["default"] for field in ALL_PARAMETER_FIELDS}
 CONFIGURABLE_FIELDS = [field for field in ALL_PARAMETER_FIELDS if field["config_path"] is not None]
+ACCORDION_ITEM_IDS = [f"accordion-item-{tab['id']}" for tab in PARAMETER_TABS]
 
 TABLE_COLUMNS = [
     {"name": "idx", "id": "idx"},
@@ -541,6 +544,7 @@ def build_config(control_values):
 
 
 def compute_plan(control_values, obstacle_layout=None):
+    planning_started_at = time.perf_counter()
     obstacle_layout = normalize_obstacle_layout(obstacle_layout)
     start_xy = (control_values["start_x"], control_values["start_y"])
     goal_xy = (control_values["goal_x"], control_values["goal_y"])
@@ -631,6 +635,8 @@ def compute_plan(control_values, obstacle_layout=None):
             }
         )
 
+    planning_time_ms = (time.perf_counter() - planning_started_at) * 1000.0
+
     return {
         "success": success,
         "start": start,
@@ -646,6 +652,7 @@ def compute_plan(control_values, obstacle_layout=None):
         "duration": cumulative_time[-1] if cumulative_time else 0.0,
         "min_clearance": min_clearance,
         "cost": cost,
+        "planning_time_ms": planning_time_ms,
         "command": command,
         "table_data": table_data,
         "pose_count": len(poses),
@@ -864,6 +871,25 @@ def build_figure(plan_result, control_values, obstacle_layout=None):
     trajectory = plan_result["trajectory"]
     trajectory_annotations = add_trajectory_traces(fig, trajectory, plan_result["headings"])
 
+    if len(trajectory) > 0:
+        fig.add_trace(
+            go.Scatter(
+                x=trajectory[:, 0],
+                y=trajectory[:, 1],
+                mode="markers",
+                marker={
+                    "size": 8,
+                    "symbol": "circle-open",
+                    "color": rgba("#22303c", 0.5),
+                    "line": {"width": 1.6, "color": rgba("#22303c", 0.5)},
+                },
+                name="Trajectory points",
+                hovertemplate="x %{x:.2f} m<br>y %{y:.2f} m<extra></extra>",
+            ),
+            row=1,
+            col=1,
+        )
+
     fig.add_trace(
         go.Scatter(
             x=[plan_result["start"].x()],
@@ -1035,6 +1061,7 @@ def render_parameter_accordion():
                         className="accordion-panel",
                     ),
                 ],
+                id=f"accordion-item-{tab['id']}",
                 className="accordion-item",
                 open=tab["id"] in default_open_tabs,
             )
@@ -1083,12 +1110,23 @@ def build_layout(initial_figure):
                         children=[
                             html.Div(
                                 [
-                                    html.H2("Parameters", className="panel-title"),
-                                    html.P(
-                                        "Use the accordion to browse all exposed TebConfig categories and scene controls.",
-                                        className="panel-copy",
+                                    html.Div(
+                                        [
+                                            html.H2("Parameters", className="panel-title"),
+                                            html.P(
+                                                "Use the accordion to browse all exposed TebConfig categories and scene controls.",
+                                                className="panel-copy",
+                                            ),
+                                        ]
                                     ),
-                                ]
+                                    html.Button(
+                                        "Collapse all",
+                                        id="collapse-all-button",
+                                        n_clicks=0,
+                                        className="secondary-button compact-button",
+                                    ),
+                                ],
+                                className="panel-header-row",
                             ),
                             render_parameter_accordion(),
                         ],
@@ -1134,6 +1172,7 @@ def build_layout(initial_figure):
                                 className="metric-grid",
                                 children=[
                                     metric_card("metric-success", "Plan status"),
+                                    metric_card("metric-runtime", "Planning time"),
                                     metric_card("metric-poses", "Pose count"),
                                     metric_card("metric-duration", "Duration"),
                                     metric_card("metric-path-length", "Path length"),
@@ -1184,6 +1223,7 @@ def build_layout(initial_figure):
                 ],
             ),
             dcc.Store(id="obstacle-layout-store", data=default_obstacle_layout()),
+            dcc.Store(id="scene-update-store", data={"source": "initial", "nonce": 0}),
         ],
     )
 
@@ -1219,15 +1259,20 @@ def create_app():
     app = Dash(__name__, assets_folder=str(SCRIPT_DIR / "assets"), title="TEB Web Demo")
     app.layout = build_layout(build_figure(initial_plan, initial_values, initial_obstacle_layout))
 
-    callback_outputs = [
+    scene_callback_outputs = [
         Output("obstacle-layout-store", "data"),
         Output("start_x", "value"),
         Output("start_y", "value"),
         Output("goal_x", "value"),
         Output("goal_y", "value"),
+        Output("scene-update-store", "data"),
+    ]
+
+    planner_callback_outputs = [
         Output("planner-figure", "figure"),
         Output("status-banner", "children"),
         Output("metric-success", "children"),
+        Output("metric-runtime", "children"),
         Output("metric-poses", "children"),
         Output("metric-duration", "children"),
         Output("metric-path-length", "children"),
@@ -1238,16 +1283,20 @@ def create_app():
         Output("trajectory-table", "data"),
     ]
 
-    callback_inputs = [
+    scene_callback_inputs = [
         Input("randomize-button", "n_clicks"),
-        Input("replan-button", "n_clicks"),
         Input("planner-figure", "relayoutData"),
     ]
+    scene_callback_states = [State("obstacle-layout-store", "data")] + [State(field["id"], "value") for field in ALL_PARAMETER_FIELDS]
 
-    callback_states = [State("obstacle-layout-store", "data")] + [State(field["id"], "value") for field in ALL_PARAMETER_FIELDS]
+    planner_callback_inputs = [
+        Input("replan-button", "n_clicks"),
+        Input("obstacle-layout-store", "data"),
+        Input("scene-update-store", "data"),
+    ] + [Input(field["id"], "value") for field in ALL_PARAMETER_FIELDS]
 
-    @app.callback(callback_outputs, callback_inputs, callback_states)
-    def update_dashboard(_randomize_clicks, _replan_clicks, relayout_data, obstacle_layout_state, *state_values):
+    @app.callback(scene_callback_outputs, scene_callback_inputs, scene_callback_states, prevent_initial_call=True)
+    def update_scene_state(_randomize_clicks, relayout_data, obstacle_layout_state, *state_values):
         trigger = None
         if callback_context.triggered:
             trigger = callback_context.triggered[0]["prop_id"].split(".")[0]
@@ -1269,6 +1318,15 @@ def create_app():
             if not changed:
                 raise PreventUpdate
 
+            return (
+                obstacle_layout,
+                control_values["start_x"],
+                control_values["start_y"],
+                control_values["goal_x"],
+                control_values["goal_y"],
+                {"source": "drag", "nonce": time.time_ns()},
+            )
+
         if trigger == "randomize-button":
             (start_x, start_y), (goal_x, goal_y) = sample_start_goal(control_values["robot_radius"], obstacle_layout)
             control_values["start_x"] = round(start_x, 2)
@@ -1276,7 +1334,47 @@ def create_app():
             control_values["goal_x"] = round(goal_x, 2)
             control_values["goal_y"] = round(goal_y, 2)
 
+            return (
+                obstacle_layout,
+                control_values["start_x"],
+                control_values["start_y"],
+                control_values["goal_x"],
+                control_values["goal_y"],
+                {"source": "randomize", "nonce": time.time_ns()},
+            )
+
+        raise PreventUpdate
+
+    @app.callback(
+        [Output(accordion_item_id, "open") for accordion_item_id in ACCORDION_ITEM_IDS],
+        Input("collapse-all-button", "n_clicks"),
+        prevent_initial_call=True,
+    )
+    def collapse_all_accordions(_n_clicks):
+        return [False] * len(ACCORDION_ITEM_IDS)
+
+    @app.callback(planner_callback_outputs, planner_callback_inputs)
+    def update_dashboard(_replan_clicks, obstacle_layout_state, _scene_update_state, *input_values):
         try:
+            trigger_ids = {
+                item["prop_id"].split(".")[0]
+                for item in callback_context.triggered
+                if item.get("prop_id")
+            }
+            raw_values = {
+                field["id"]: input_values[index]
+                for index, field in enumerate(ALL_PARAMETER_FIELDS)
+            }
+            control_values = collect_control_values(raw_values)
+            obstacle_layout = normalize_obstacle_layout(obstacle_layout_state)
+
+            if (
+                "replan-button" not in trigger_ids
+                and "scene-update-store" not in trigger_ids
+                and not control_values["auto_replan"]
+            ):
+                raise PreventUpdate
+
             plan_result = compute_plan(control_values, obstacle_layout)
             figure = build_figure(plan_result, control_values, obstacle_layout)
             success_text = "Succeeded" if plan_result["success"] else "Failed"
@@ -1294,14 +1392,10 @@ def create_app():
                 )
 
             return (
-                obstacle_layout,
-                control_values["start_x"],
-                control_values["start_y"],
-                control_values["goal_x"],
-                control_values["goal_y"],
                 figure,
                 banner,
                 success_text,
+                format_metric(plan_result["planning_time_ms"], " ms", precision=1),
                 str(plan_result["pose_count"]),
                 format_metric(plan_result["duration"], " s"),
                 format_metric(plan_result["path_length"], " m"),
@@ -1311,7 +1405,15 @@ def create_app():
                 "Yes" if plan_result["diverged"] else "No",
                 plan_result["table_data"],
             )
+        except PreventUpdate:
+            raise
         except Exception as exc:
+            raw_values = {
+                field["id"]: input_values[index]
+                for index, field in enumerate(ALL_PARAMETER_FIELDS)
+            }
+            control_values = collect_control_values(raw_values)
+            obstacle_layout = normalize_obstacle_layout(obstacle_layout_state)
             empty_result = {
                 "start": make_pose(
                     (control_values["start_x"], control_values["start_y"]),
@@ -1329,14 +1431,10 @@ def create_app():
             figure = build_figure(empty_result, control_values, obstacle_layout)
             banner = build_status_banner(f"Planning error: {exc}", False)
             return (
-                obstacle_layout,
-                control_values["start_x"],
-                control_values["start_y"],
-                control_values["goal_x"],
-                control_values["goal_y"],
                 figure,
                 banner,
                 "Error",
+                "--",
                 "--",
                 "--",
                 "--",

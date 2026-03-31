@@ -127,6 +127,20 @@ body {
   line-height: 1.6;
 }
 
+.panel-header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.compact-button {
+  padding: 10px 14px;
+  font-size: 13px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 .control-section {
   margin-top: 20px;
   padding-top: 18px;
