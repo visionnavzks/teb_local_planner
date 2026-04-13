@@ -3,3 +3,15 @@
 .*
 *.kdev4
 cmake-build-debug
+
+# Build directories
+build/
+teb_standalone/build/
+
+# Python
+__pycache__/
+*.pyc
+*.pyd
+*.so
+*.egg-info/
+dist/
